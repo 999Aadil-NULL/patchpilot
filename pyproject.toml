@@ -1,0 +1,29 @@
+[project]
+name = "patchpilot"
+version = "0.1.0"
+description = "Autonomous SWE agent for SWE-bench Lite issues"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "datasets>=5.1.0",
+    "docker>=7.2.0",
+    "fastembed>=0.9.1",
+    "openai>=3.42.1",
+    "pydantic>=2",
+    "python-dotenv>=1.2.4",
+    "qdrant-client>=1.20.0",
+    "rank-bm25>=0.2.2",
+    "rich>=15.0.0",
+    "streamlit>=1.66.1",
+    "swebench>=5.0.2",
+    "tenacity>=9.2.1",
+    "tree-sitter>=0.26.0",
+    "tree-sitter-python>=0.25.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
