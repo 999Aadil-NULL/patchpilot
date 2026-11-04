@@ -19,7 +19,8 @@ from agent.config import CACHE_DIR
 from agent.dataset import get_issue
 from agent.guards import describe_errors, syntax_check
 from agent.events import emit, write_state
-from agent.localize.repomap import is_test_path
+from agent.localize.focus import EditLocations, focus_context, validate_locations
+from agent.localize.repomap import build_repomap, is_test_path, render
 from agent.localize.retrieve import _chunks_text, localize
 from agent.oracle import grade
 from agent.patcher import apply_edits, parse_edits
@@ -103,6 +104,7 @@ class Orchestrator:
         self.sb: Sandbox | None = None
         self.repo_dir: Path = CACHE_DIR / "repos" / instance_id
         self.context_text = ""
+        self.patch_context = ""
         self._baseline: dict[str, dict[str, str]] = {}  # test file → status map at base commit
         self._new_failures: dict[int, list[str]] = {}    # attempt n → "file::test: STATUS"
         self._reflections: dict[int, str] = {}           # attempt n → reflection analysis
@@ -166,6 +168,9 @@ class Orchestrator:
         self.ev("start")
         self.state.context = localize(self.issue, plan, self.repo_dir, run_id=self.run_id)
         self.context_text = self._build_context(self.state.context)
+        self.patch_context = self.context_text
+        if config.HARNESS_FOCUS:
+            self._focus(plan)
         self.ev("end")
 
         # REPRODUCE
@@ -230,6 +235,29 @@ class Orchestrator:
         if missing:
             out += "## Verified facts\n" + "\n".join(missing) + "\n\n"
         return out
+
+    def _focus(self, plan: Plan) -> None:
+        """Pick edit locations for the patch prompt. Any failure leaves the v1 context in place."""
+        ctx = self.state.context
+        assert ctx is not None
+        repomap = build_repomap(self.repo_dir, cache_key=self.issue.instance_id)
+        try:
+            picked = llm.complete_json("planner", [
+                {"role": "system", "content": prompts.FOCUS_SYSTEM},
+                {"role": "user", "content": prompts.focus_user(self.issue, plan, self.context_text,
+                                                               render(repomap, ctx.candidate_files))},
+            ], EditLocations)
+        except llm.LLMError as e:
+            self.ev("info", message="edit_locations", locations=[], fallback=f"{type(e).__name__}: {e}"[:300])
+            return
+        valid, dropped = validate_locations(picked.locations, repomap)
+        ctx.edit_locations = [f"{loc.file_path}::{loc.symbol}" for loc in valid]
+        self.ev("info", message="edit_locations", locations=ctx.edit_locations, dropped=dropped,
+                fallback="" if valid else "no valid locations")
+        if valid:
+            missing = [ln for ln in ctx.notes.splitlines() if ln.startswith("DOES NOT EXIST:")]
+            facts = "## Verified facts\n" + "\n".join(missing) + "\n\n" if missing else ""
+            self.patch_context = focus_context(self.repo_dir, repomap, valid, ctx.chunks) + facts
 
     # -------------------------------------------------------------- reproduce
     def _reproduce(self, plan: Plan) -> None:
@@ -303,7 +331,7 @@ class Orchestrator:
         repro_summary = self.state.repro_base.failure_summary if self.state.repro_base else ""
         messages = [
             {"role": "system", "content": prompts.PATCH_SYSTEM},
-            {"role": "user", "content": prompts.patch_user(self.issue, plan, self.context_text,
+            {"role": "user", "content": prompts.patch_user(self.issue, plan, self.patch_context,
                                                            self.state.repro_script, repro_summary, self._history())},
         ]
         temperature = 0.2 if n == 1 else 0.5

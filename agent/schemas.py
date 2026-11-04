@@ -36,6 +36,7 @@ class ContextBundle(BaseModel):
     candidate_files: list[str]
     chunks: list[CodeChunk]
     notes: str = ""
+    edit_locations: list[str] = []   # "path::symbol", set when HARNESS_FOCUS narrows the patch prompt
 
 
 class EditBlock(BaseModel):

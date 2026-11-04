@@ -119,6 +119,19 @@ def repro_user(issue: Issue, plan, context: str, feedback: str = "") -> str:
     )
 
 
+# ------------------------------------------------------------------ FOCUS
+FOCUS_SYSTEM = (
+    "You locate where a fix belongs. Given an issue, a plan, code context and a map of symbols, choose the "
+    "functions, methods or classes that must be EDITED to fix the issue: at most 3, most likely first. "
+    "Choose only symbols listed in the map, written exactly as listed (Class.method for methods)."
+)
+
+
+def focus_user(issue: Issue, plan, context: str, symbol_map: str) -> str:
+    return (f"{_issue_block(issue)}\n\n{plan_block(plan)}{context}## Symbol map\n{symbol_map}\n\n"
+            'Return JSON: {"locations": [{"file_path": "...", "symbol": "..."}]}')
+
+
 # ------------------------------------------------------------------ PATCH
 PATCH_SYSTEM = (
     "You are an expert software engineer fixing an issue in a Python repository. You make minimal, correct, "

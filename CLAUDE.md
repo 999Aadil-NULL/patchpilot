@@ -168,7 +168,7 @@ Gemini run.
 | H0 context audit | done | 4571f3f | No truncation in qwen-v1 (max prompt 26,925 = 82% of 32k) |
 | H1 correctness fixes | done | 8d921c9, b30be0d | Badge, repro exception parsing, prompt-size guard. Ran live on django-11099 (repro+regression path). The regression-only path and a guard firing have only been tested offline. |
 | H2 lint guardrail | done, flag default OFF | (this commit) | 44 tests pass. `py_compile` checked in Docker on all 5 repos (Python 3.6–3.11). Flag off replays qwen-v1 django-11099 identically (13/13 cached). Live flag on: caught a real broken edit, but the repair turn did not apply, so `lint_repaired` has only been seen in unit tests. |
-| H3 narrow edit scope | todo | | |
+| H3 narrow edit scope | done, flag default OFF | (this commit) | First PATCH prompt, flag vs qwen-v1: django-11099 3,202 → 1,582 tokens (−51%), sympy-12481 4,229 → 2,782 (−34%). Locations logged. `Class.attribute` resolves to its class. |
 | H4 sample K + select | todo | | |
 | H5 repro-trace localization | stretch | | Only if H0–H4 done by 02:00 |
 | H6 ablation batch | todo | | |
@@ -290,6 +290,10 @@ A step that overruns its slot: flag stays OFF, commit what works, move on.
   it as a SyntaxError; `patcher.py` does not strip it yet.
 - `patcher.py` now strips those fences (first/last line of a section) unless the fenced text really is in the
   file. Not behind a flag, so flag-off runs no longer replay qwen-v1 exactly on django-11099.
+
+- A repro can be "valid" yet never reach the bug: django-11099's repro dies on a setup `RuntimeError` before and
+  after the patch. The patch resolved under the oracle while agent verification failed (false negative), and the
+  failure text steered the model toward unrelated files. Not fixed.
 
 ## 9. Out of scope tonight
 Fine-tuning, LLM-as-judge rerankers, new retrieval models, multi-agent debate, parallel runs,

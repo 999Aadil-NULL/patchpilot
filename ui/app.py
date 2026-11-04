@@ -249,6 +249,8 @@ def render_run(run_id: str) -> None:
         ctx = state.context
         with st.expander(f"🔎 Localization — {len(ctx.candidate_files)} files, {len(ctx.chunks)} chunks", expanded=False):
             st.markdown("**Candidate files:** " + ", ".join(f"`{f}`" for f in ctx.candidate_files))
+            if ctx.edit_locations:
+                st.markdown("**Edit locations:** " + ", ".join(f"`{x}`" for x in ctx.edit_locations))
             for c in ctx.chunks:
                 st.markdown(f"`{c.file_path}:{c.start_line}-{c.end_line}` · {c.kind} **{c.symbol}**"
                             + (f" · score {c.score:.3f}" if c.score else ""))

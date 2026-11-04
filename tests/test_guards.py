@@ -101,6 +101,7 @@ def orch(monkeypatch):
     o.state = RunState(run_id="r", issue=o.issue)
     o.sb = FakeSandbox()
     o.context_text = ""
+    o.patch_context = ""
     o._reflections, o._new_failures, o._repro_fixes, o._baseline = {}, {}, 0, {}
     o.events = []
     monkeypatch.setattr(o, "_stage", lambda s: None, raising=False)
