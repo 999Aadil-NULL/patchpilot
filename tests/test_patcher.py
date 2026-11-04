@@ -162,3 +162,49 @@ def test_sequential_edits_same_file():
     ])
     assert errs == []
     assert "# 2" in sb.files["c.py"]
+
+
+# ---- code fences inside SEARCH / REPLACE
+def test_fences_around_both_sections_are_stripped():
+    out, tier = apply_to_text(SRC, "```python\n    return a + b\n```\n", "```python\n    return a - b\n```\n")
+    assert tier == "exact" and "return a - b" in out and "```" not in out
+
+
+def test_opening_fence_only():
+    out, _ = apply_to_text(SRC, "```python\n    return a + b\n", "```python\n    return a - b\n")
+    assert "```" not in out and "return a - b" in out
+
+
+def test_fence_only_in_replace_is_stripped():
+    out, _ = apply_to_text(SRC, "    return a + b\n", "```\n    return a - b\n```\n")
+    assert "```" not in out and "return a - b" in out
+
+
+def test_fence_really_in_the_file_is_kept():
+    src = 'DOC = """\n```python\nx = 1\n```\n"""\n'
+    out, _ = apply_to_text(src, "```python\nx = 1\n```\n", "```python\nx = 2\n```\n")
+    assert out == 'DOC = """\n```python\nx = 2\n```\n"""\n'
+
+
+def test_fence_lines_inside_a_section_are_untouched():
+    src = 'DOC = """\nintro\n```\nx\n```\nend\n"""\n'
+    out, _ = apply_to_text(src, "intro\n```\nx\n```\nend\n", "intro\n```\ny\n```\nend\n")
+    assert out.count("```") == 2 and "y\n" in out
+
+
+def test_section_that_is_only_a_fence_is_an_error():
+    with pytest.raises(PatchError):
+        apply_to_text(SRC, "```python\n```\n", "x\n")
+
+
+def test_new_file_loses_its_fence():
+    store = {}
+
+    class Store:
+        def read_file(self, path):
+            raise FileNotFoundError(path)
+
+        def write_file(self, path, content):
+            store[path] = content
+    assert apply_edits(Store(), [EditBlock(file_path="n.py", search="", replace="```python\nx = 1\n```\n")]) == []
+    assert store["n.py"] == "x = 1\n"

@@ -288,6 +288,8 @@ A step that overruns its slot: flag stays OFF, commit what works, move on.
 - Models sometimes put ```` ```python ```` fence lines INSIDE SEARCH/REPLACE (3/40 edit blocks in qwen-v1, all
   django-11099). The fuzzy tier still matches SEARCH, so the fence is written into the source file. H2 catches
   it as a SyntaxError; `patcher.py` does not strip it yet.
+- `patcher.py` now strips those fences (first/last line of a section) unless the fenced text really is in the
+  file. Not behind a flag, so flag-off runs no longer replay qwen-v1 exactly on django-11099.
 
 ## 9. Out of scope tonight
 Fine-tuning, LLM-as-judge rerankers, new retrieval models, multi-agent debate, parallel runs,

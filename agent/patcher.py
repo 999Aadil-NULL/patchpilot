@@ -29,6 +29,8 @@ _SEARCH_RE = re.compile(r"^\s*<{5,9}\s*SEARCH\s*$")
 # whose length equals the previous line's heading text is treated as an underline, not a divider.
 _DIVIDER_RE = re.compile(r"^\s*={7}\s*$")
 _REPLACE_RE = re.compile(r"^\s*>{5,9}\s*REPLACE\s*$")
+_OPEN_FENCE_RE = re.compile(r"^\s*```\w*\s*$")
+_CLOSE_FENCE_RE = re.compile(r"^\s*```\s*$")
 
 
 def _is_divider(lines: list[str], idx: int) -> bool:
@@ -95,6 +97,24 @@ def parse_edits(text: str) -> list[EditBlock]:
     return edits
 
 
+# ------------------------------------------------------------------ code fences
+def _strip_fences(text: str) -> str:
+    """Remove a markdown fence on the first and/or last line of a SEARCH or REPLACE section."""
+    lines = text.splitlines()
+    if lines and _OPEN_FENCE_RE.match(lines[0]):
+        lines = lines[1:]
+    if lines and _CLOSE_FENCE_RE.match(lines[-1]):
+        lines = lines[:-1]
+    return _join(lines)
+
+
+def _unfence(content: str, search: str, replace: str) -> tuple[str, str]:
+    """Models may wrap a section in a fence. Keep it only if the fenced text really is in the file."""
+    if search != _strip_fences(search) and search in content:
+        return search, replace
+    return _strip_fences(search), _strip_fences(replace)
+
+
 # ------------------------------------------------------------------ matching
 def _line_matches(hay: list[str], needle: list[str]) -> list[int]:
     n = len(needle)
@@ -140,6 +160,7 @@ def _closest_hint(hay: list[str], needle: list[str]) -> str:
 
 def apply_to_text(content: str, search: str, replace: str, path: str = "<file>") -> tuple[str, str]:
     """Apply one edit to text. Returns (new_content, tier). Raises PatchError."""
+    search, replace = _unfence(content, search, replace)
     if not search.strip():
         raise PatchError(f"{path}: empty SEARCH block on an existing file (empty SEARCH only creates new files)")
 
@@ -213,7 +234,7 @@ def apply_edits(sandbox: FileStore, edits: list[EditBlock]) -> list[str]:
             if cur is not None and cur.strip():
                 errors.append(f"{path}: empty SEARCH but file already exists — use a SEARCH block to edit it")
                 continue
-            contents[path] = e.replace
+            contents[path] = _strip_fences(e.replace)
             dirty.add(path)
             continue
         if cur is None:
