@@ -173,6 +173,7 @@ Gemini run.
 | H5 repro-trace localization | done, flag default OFF | (this commit) | Started 00:36, H0–H4 done. Live on sympy-12481: 975 functions traced, 5 chunks added and logged. Added functions were hot helpers, not the fault site: count ranking is weak. Docker check on Python 3.6 and 3.9. |
 | H6 ablation batch | running | (this commit: tooling) | `qwen-v2-full` started with LINT, FOCUS, SAMPLES=3, SBFL on; hard stop 04:15 IST. |
 | H7 Meta API | waiting for key | | |
+| UI readable names | done | (this commit) | Display only, in `ui/app.py`: picker, past runs and run header show project + PR + issue title, with the raw id in small monospace. No ids, files or folders renamed. Rendered via AppTest; not viewed in a browser. |
 
 ---
 

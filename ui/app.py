@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -29,11 +30,48 @@ STAGES = [
 ]
 TERMINAL = {"awaiting_review", "approved", "failed"}
 STALE_S = 15 * 60
+PROJECT_NAMES = {"django/django": "Django", "sympy/sympy": "SymPy", "psf/requests": "Requests",
+                 "pytest-dev/pytest": "pytest", "pallets/flask": "Flask"}
+LABEL_TITLE_CHARS = 60
 # optional cost estimate, USD per 1M tokens (local Ollama = 0)
 PRICE_IN = float(os.getenv("PRICE_IN_PER_M", "0") or 0)
 PRICE_OUT = float(os.getenv("PRICE_OUT_PER_M", "0") or 0)
 
 st.set_page_config(page_title="PatchPilot", page_icon="🛠️", layout="wide")
+
+
+# ------------------------------------------------------------------ readable names (display only)
+def instance_label(instance_id: str, problem_statement: str = "") -> str:
+    """django__django-11099 → 'Django PR 11099 — UsernameValidator allows trailing newline in usernames'."""
+    repo, _, number = instance_id.rpartition("-")
+    repo = repo.replace("__", "/", 1)
+    project = PROJECT_NAMES.get(repo, repo.rsplit("/", 1)[-1])
+    title = next((ln.strip() for ln in problem_statement.splitlines() if ln.strip()), "")
+    if len(title) > LABEL_TITLE_CHARS:
+        title = title[:LABEL_TITLE_CHARS - 1].rstrip() + "…"
+    return f"{project} PR {number}" + (f" — {title}" if title else "")
+
+
+def run_tag(run_id: str, instance_id: str) -> str:
+    """The part of a run name before the instance id: qwen-v2-full-django__django-11099 → qwen-v2-full."""
+    for name in (instance_id, instance_id.split("__", 1)[-1]):  # some early runs use the short form
+        i = run_id.find(name)
+        if i >= 0:
+            return run_id[:i].rstrip("-_.")
+    return ""
+
+
+def run_label(run_id: str, state: RunState | None) -> str:
+    if state is None:  # not started, or mid-write
+        return run_id
+    label = instance_label(state.issue.instance_id, state.issue.problem_statement)
+    tag = run_tag(run_id, state.issue.instance_id)
+    return f"{tag} · {label}" if tag else label
+
+
+def md_escape(text: str) -> str:
+    """Issue titles are free text: `sqf_list`, a | b and [x] must not render as Markdown."""
+    return re.sub(r"([\\`*_{}\[\]()#+!|~$:<>])", r"\\\1", text)
 
 
 # ------------------------------------------------------------------ data access
@@ -196,7 +234,8 @@ def render_run(run_id: str) -> None:
     phase = run_phase(run_id, events, state)
 
     head = st.columns([3, 1])
-    head[0].subheader(run_id)
+    head[0].subheader(md_escape(run_label(run_id, state)))
+    head[0].caption(f"`{run_id}`")
     head[1].caption({"running": "⏳ running (auto-refresh 2s)", "done": "finished",
                      "stalled": "⚠️ stalled (process gone without end event)"}[phase])
     if state is None:
@@ -365,8 +404,10 @@ with st.sidebar:
     repos = sorted({c["repo"] for c in cands})
     repo_f = st.selectbox("Repository", ["(all)"] + repos)
     shown = [c for c in cands if repo_f == "(all)" or c["repo"] == repo_f]
-    labels = {c["instance_id"]: f"{c['instance_id']} — {c['title'][:60]}" for c in shown}
+    labels = {c["instance_id"]: instance_label(c["instance_id"], c["title"]) for c in shown}
     inst = st.selectbox("Instance", list(labels), format_func=lambda i: labels[i]) if shown else None
+    if inst:
+        st.caption(f"`{inst}`")  # dropdown options are plain text, so the raw id sits below
     busy = active_run()
     if busy:
         st.info(f"Run in progress: `{busy}` (one at a time — GPU/RAM)")
@@ -386,7 +427,7 @@ with st.sidebar:
             if s and s.status == "awaiting_review" and s.regression_only:
                 icon = "⚠️"
             res = " · 🏛️" if s and s.oracle and s.oracle.resolved else ""
-            return f"{icon} {r}{res}"
+            return f"{icon} {md_escape(run_label(r, s))}{res} :small[`{r}`]"
 
         st.session_state["run_id"] = st.radio("Past runs", runs, index=idx, format_func=_fmt,
                                               label_visibility="collapsed")
