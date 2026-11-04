@@ -166,7 +166,7 @@ Gemini run.
 | Step | State | Commit | Notes |
 |---|---|---|---|
 | H0 context audit | done | 4571f3f | No truncation in qwen-v1 (max prompt 26,925 = 82% of 32k) |
-| H1 correctness fixes | partly done | (this commit) | Badge + repro exception fixes in; 24 tests pass. Live run not yet exercised. **Prompt-size guard not yet implemented.** |
+| H1 correctness fixes | done | 8d921c9 + guard commit | Badge, repro exception parsing, prompt-size guard. Unit tests pass; not yet exercised in a live run. |
 | H2 lint guardrail | todo | | |
 | H3 narrow edit scope | todo | | |
 | H4 sample K + select | todo | | |

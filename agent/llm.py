@@ -163,6 +163,23 @@ def _cache_put(key: str, c: Completion, model: str) -> None:
     tmp.replace(LLM_CACHE_DIR / f"{key}.json")
 
 
+# ---------------------------------------------------------------- prompt-size guard
+CHARS_PER_TOKEN = 3.5
+
+
+def _estimate_prompt_tokens(messages: list[dict]) -> int:
+    return int(sum(len(m.get("content") or "") for m in messages) / CHARS_PER_TOKEN)
+
+
+def _warn_if_prompt_large(role: Role, messages: list[dict]) -> None:
+    """Warn only: the call still goes out unchanged. `warning` keeps the UI from marking the stage as failed."""
+    estimate = _estimate_prompt_tokens(messages)
+    ctx = _run_ctx.get()
+    if ctx and estimate > config.LLM_MAX_PROMPT_TOKENS:
+        emit(ctx[0], ctx[1], "error", error="prompt_near_limit", warning=True, role=role,
+             estimated_tokens=estimate, limit=config.LLM_MAX_PROMPT_TOKENS)
+
+
 # ---------------------------------------------------------------- public API
 def complete(role: Role, messages: list[dict], *, temperature: float = 0.2, max_tokens: int = 4096) -> str:
     cfg = role_config(role)
@@ -173,6 +190,7 @@ def complete(role: Role, messages: list[dict], *, temperature: float = 0.2, max_
     if comp is not None:
         cached = True
     else:
+        _warn_if_prompt_large(role, messages)
         # thinking models spend hidden reasoning tokens from the same budget → enforce a floor,
         # and on finish_reason=length retry with a doubled budget (truncated output is never cached)
         budget = max(max_tokens, config.LLM_MAX_TOKENS_FLOOR)

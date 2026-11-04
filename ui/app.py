@@ -166,7 +166,7 @@ def stage_timeline(events: list[dict], state: RunState | None, phase: str) -> No
             counts[s] = counts.get(s, 0) + 1
         elif t == "end":
             ends[s] = e["ts"]
-        elif t == "error":
+        elif t == "error" and not e.get("warning"):
             errors.add(s)
     current = state.status if state else "planning"
     cols = st.columns(len(STAGES))
