@@ -1,0 +1,80 @@
+[
+ {
+  "instance_id": "django__django-11099",
+  "gold_resolved": true,
+  "f2p": "3/3",
+  "p2p": "19/19"
+ },
+ {
+  "instance_id": "sympy__sympy-12481",
+  "gold_resolved": true,
+  "f2p": "1/1",
+  "p2p": "7/7"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7432",
+  "gold_resolved": true,
+  "f2p": "1/1",
+  "p2p": "77/77"
+ },
+ {
+  "instance_id": "psf__requests-2317",
+  "gold_resolved": false,
+  "f2p": "7/8",
+  "p2p": "129/133"
+ },
+ {
+  "instance_id": "django__django-13551",
+  "gold_resolved": true,
+  "f2p": "2/2",
+  "p2p": "56/56"
+ },
+ {
+  "instance_id": "django__django-12184",
+  "gold_resolved": true,
+  "f2p": "1/1",
+  "p2p": "25/25"
+ },
+ {
+  "instance_id": "django__django-14016",
+  "gold_resolved": true,
+  "f2p": "2/2",
+  "p2p": "13/13"
+ },
+ {
+  "instance_id": "sympy__sympy-18698",
+  "gold_resolved": true,
+  "f2p": "1/1",
+  "p2p": "147/147"
+ },
+ {
+  "instance_id": "sympy__sympy-12171",
+  "gold_resolved": true,
+  "f2p": "1/1",
+  "p2p": "8/8"
+ },
+ {
+  "instance_id": "sympy__sympy-12236",
+  "gold_resolved": true,
+  "f2p": "1/1",
+  "p2p": "133/133"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7220",
+  "gold_resolved": true,
+  "f2p": "1/1",
+  "p2p": "11/11"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-11148",
+  "gold_resolved": true,
+  "f2p": "2/2",
+  "p2p": "129/129"
+ },
+ {
+  "instance_id": "pallets__flask-4992",
+  "gold_resolved": true,
+  "f2p": "1/1",
+  "p2p": "18/18"
+ }
+]
