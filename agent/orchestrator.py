@@ -26,6 +26,7 @@ from agent.oracle import grade
 from agent.patcher import apply_edits, parse_edits
 from agent.sandbox import REPRO_FILE, Sandbox, failure_summary
 from agent.schemas import Attempt, ContextBundle, ExecResult, Plan, RunState, TestResult
+from agent.select import select
 
 INVALID_REPRO_EXC = {"ImportError", "ModuleNotFoundError", "SyntaxError", "IndentationError", "NameError",
                      "TabError", "ImproperlyConfigured"}
@@ -334,6 +335,8 @@ class Orchestrator:
             {"role": "user", "content": prompts.patch_user(self.issue, plan, self.patch_context,
                                                            self.state.repro_script, repro_summary, self._history())},
         ]
+        if config.HARNESS_SAMPLES > 1:
+            return self._sampled_attempt(n, plan, messages)
         temperature = 0.2 if n == 1 else 0.5
         text = llm.complete("coder", messages, temperature=temperature, max_tokens=8192)
         self._apply(text, att)
@@ -367,6 +370,69 @@ class Orchestrator:
         self.ev("end", attempt=n)
         return att
 
+    def _candidate(self, i: int, n: int, messages: list[dict]) -> tuple[Attempt, dict]:
+        """Generate one candidate on a fresh tree and check it. Regression runs only if repro did not fail."""
+        assert self.sb is not None
+        self._stage("patching")
+        self.sb.reset()
+        att = Attempt(n=n)
+        temperature = 0.2 if i == 0 else 0.7
+        text = llm.complete("coder", messages, temperature=temperature, max_tokens=8192, sample_idx=i)
+        self._apply(text, att)
+        applied = not att.apply_errors
+        lint_clean = True
+        if config.HARNESS_LINT and att.edits and applied:
+            lint_clean = self._lint_gate(att, messages, text, temperature)
+        att.diff = self.sb.diff()
+        if not att.diff.strip() and not att.apply_errors:
+            att.apply_errors = ["Edits produced no change to the code."]
+        self._new_failures.pop(n, None)
+        if att.diff.strip() and not att.apply_errors:
+            self._stage("verifying")
+            if self.state.repro_script:
+                att.repro = self.sb.run_repro(self.state.repro_script)
+            if att.repro is None or att.repro.passed:
+                att.regression_files = self._regression_files(att)
+                if att.regression_files:
+                    att.regression = self._run_regression(att.regression_files, n)
+        failures = self._new_failures.get(n, []) if att.regression is not None else None
+        summary = {"index": i, "temperature": temperature, "diff": att.diff,
+                   "clean_apply": applied and not (att.apply_errors and lint_clean), "lint_clean": lint_clean,
+                   "repro_passed": att.repro.passed if att.repro else None,
+                   "regression_passed": att.regression.passed if att.regression else None,
+                   "new_failures": len(failures) if failures is not None else None,
+                   "apply_errors": [e[:300] for e in att.apply_errors]}
+        self.ev("info", message="candidate", attempt=n, **{k: v for k, v in summary.items() if k != "diff"})
+        return att, summary
+
+    def _sampled_attempt(self, n: int, plan: Plan, messages: list[dict]) -> Attempt:
+        """K candidates, one chosen by execution. Its feedback, not the others', goes into the next attempt."""
+        assert self.sb is not None
+        results = []
+        for i in range(config.HARNESS_SAMPLES):
+            att, summary = self._candidate(i, n, messages)
+            results.append((att, summary, list(self._new_failures.get(n, []))))
+        summaries = [r[1] for r in results]
+        idx, reason = select(summaries)
+        chosen, summary, failures = results[idx]
+        summary.update(selected=True, reason=reason)
+        chosen.candidates = summaries
+        self._new_failures[n] = failures
+        self.ev("info", message="candidate_selection", attempt=n, selected=idx, reason=reason, k=len(results))
+        self.sb.reset()  # the tree holds the last candidate; reflection needs the chosen one
+        if chosen.edits:
+            apply_edits(self.sb, chosen.edits)
+        self._stage("patching")
+        self.ev("result", attempt=n, n_edits=len(chosen.edits), apply_errors=chosen.apply_errors, diff=chosen.diff)
+        self.ev("end", attempt=n)
+        self._stage("verifying")
+        self.ev("start", attempt=n)
+        if not self._attempt_ok(chosen) and (chosen.repro is not None or chosen.regression is not None):
+            self._reflect(chosen, plan)
+        self.ev("result", attempt=n, ok=self._attempt_ok(chosen))
+        self.ev("end", attempt=n)
+        return chosen
+
     def _apply(self, text: str, att: Attempt) -> None:
         """Parse the coder's reply and apply it to the tree, recording edits and errors on the attempt."""
         assert self.sb is not None
@@ -377,12 +443,15 @@ class Orchestrator:
         else:
             att.apply_errors = apply_edits(self.sb, att.edits)
 
-    def _lint_gate(self, att: Attempt, messages: list[dict], text: str, temperature: float) -> None:
-        """Compile the edited files. On failure give the coder ONE repair turn, which is not a new attempt."""
+    def _lint_gate(self, att: Attempt, messages: list[dict], text: str, temperature: float) -> bool:
+        """Compile the edited files. On failure give the coder ONE repair turn, which is not a new attempt.
+
+        Returns False when the result still does not compile.
+        """
         assert self.sb is not None
         errors = syntax_check(self.sb, sorted({e.file_path for e in att.edits}))
         if not errors:
-            return
+            return True
         self.ev("info", message="lint_fail", attempt=att.n, errors=errors)
         repair = prompts.lint_repair_user(describe_errors(self.sb, errors))
         fixed = llm.complete("coder", messages + [{"role": "assistant", "content": text},
@@ -393,13 +462,14 @@ class Orchestrator:
         if att.apply_errors:
             att.apply_errors = errors + att.apply_errors  # the next attempt still needs the compile error
             self.ev("info", message="lint_fail", attempt=att.n, after_repair=True, errors=att.apply_errors)
-            return
+            return False
         errors = syntax_check(self.sb, sorted({e.file_path for e in att.edits}))
         if errors:
             att.apply_errors = errors
             self.ev("info", message="lint_fail", attempt=att.n, after_repair=True, errors=errors)
-        else:
-            self.ev("info", message="lint_repaired", attempt=att.n)
+            return False
+        self.ev("info", message="lint_repaired", attempt=att.n)
+        return True
 
     # -------------------------------------------------------------- reflect
     def _reflect(self, att: Attempt, plan: Plan) -> None:

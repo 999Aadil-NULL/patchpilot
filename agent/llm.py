@@ -137,10 +137,13 @@ def _provider_for(cfg: RoleConfig) -> OpenAICompatProvider:
 
 
 # ---------------------------------------------------------------- cache
-def _cache_key(cfg: RoleConfig, messages: list[dict], temperature: float, max_tokens: int) -> str:
-    blob = json.dumps({"base_url": cfg.base_url, "model": cfg.model, "messages": messages,
-                       "temperature": temperature, "max_tokens": max_tokens},
-                      sort_keys=True, ensure_ascii=False)
+def _cache_key(cfg: RoleConfig, messages: list[dict], temperature: float, max_tokens: int,
+               sample_idx: int = 0) -> str:
+    fields = {"base_url": cfg.base_url, "model": cfg.model, "messages": messages,
+              "temperature": temperature, "max_tokens": max_tokens}
+    if sample_idx:  # only when non-zero, so existing cache entries stay valid
+        fields["sample_idx"] = sample_idx
+    blob = json.dumps(fields, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
@@ -181,9 +184,10 @@ def _warn_if_prompt_large(role: Role, messages: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------- public API
-def complete(role: Role, messages: list[dict], *, temperature: float = 0.2, max_tokens: int = 4096) -> str:
+def complete(role: Role, messages: list[dict], *, temperature: float = 0.2, max_tokens: int = 4096,
+             sample_idx: int = 0) -> str:
     cfg = role_config(role)
-    key = _cache_key(cfg, messages, temperature, max_tokens)
+    key = _cache_key(cfg, messages, temperature, max_tokens, sample_idx)
     t0 = time.time()
     cached = False
     comp = _cache_get(key) if config.LLM_CACHE else None
@@ -220,11 +224,11 @@ def complete(role: Role, messages: list[dict], *, temperature: float = 0.2, max_
         else:
             _usage.tokens_in += comp.tokens_in
             _usage.tokens_out += comp.tokens_out
-    _emit_call(role, cfg.model, comp.tokens_in, comp.tokens_out, time.time() - t0, cached)
+    _emit_call(role, cfg.model, comp.tokens_in, comp.tokens_out, time.time() - t0, cached, cache_key=key[:12])
     return comp.text
 
 
-def _emit_call(role, model, tin, tout, latency, cached, error: str | None = None) -> None:
+def _emit_call(role, model, tin, tout, latency, cached, error: str | None = None, cache_key: str = "") -> None:
     ctx = _run_ctx.get()
     if not ctx:
         return
@@ -233,6 +237,8 @@ def _emit_call(role, model, tin, tout, latency, cached, error: str | None = None
                    latency_s=round(latency, 3), cached=cached)
     if error:
         payload["error"] = error
+    if cache_key:
+        payload["cache_key"] = cache_key
     emit(run_id, stage, "llm_call", **payload)
 
 

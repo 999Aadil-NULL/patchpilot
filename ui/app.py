@@ -278,6 +278,10 @@ def render_run(run_id: str) -> None:
         tabs = st.tabs([f"Attempt {a.n} {'✅' if _attempt_ok(a) else '❌'}" for a in state.attempts])
         for tab, a in zip(tabs, state.attempts):
             with tab:
+                if a.candidates:
+                    chosen = next((c for c in a.candidates if c.get("selected")), {})
+                    st.info(f"{len(a.candidates)} candidates, selected #{chosen.get('index', '?')}: "
+                            f"{chosen.get('reason', '')}")
                 if a.apply_errors:
                     st.error("Apply errors:\n\n" + "\n\n".join(a.apply_errors))
                 c1, c2 = st.columns(2)

@@ -67,6 +67,7 @@ class Attempt(BaseModel):
     repro: Optional[TestResult] = None
     regression: Optional[TestResult] = None
     regression_files: list[str] = []
+    candidates: list[dict] = []   # H4: diff + result summary of each sampled candidate
 
 
 class OracleResult(BaseModel):
