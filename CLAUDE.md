@@ -170,7 +170,7 @@ Gemini run.
 | H2 lint guardrail | done, flag default OFF | (this commit) | 44 tests pass. `py_compile` checked in Docker on all 5 repos (Python 3.6–3.11). Flag off replays qwen-v1 django-11099 identically (13/13 cached). Live flag on: caught a real broken edit, but the repair turn did not apply, so `lint_repaired` has only been seen in unit tests. |
 | H3 narrow edit scope | done, flag default OFF | (this commit) | First PATCH prompt, flag vs qwen-v1: django-11099 3,202 → 1,582 tokens (−51%), sympy-12481 4,229 → 2,782 (−34%). Locations logged. `Class.attribute` resolves to its class. |
 | H4 sample K + select | done, flag default OFF | (this commit) | Live K=3 on sympy-12481 with lint + focus: 9 patch calls, 9 distinct cache keys, selection event each attempt; not resolved; 21 min. K=1: unit test, plus a flag-off replay matching v1 on attempt 1 (later attempts diverge after an uncached reflection call). |
-| H5 repro-trace localization | stretch | | Only if H0–H4 done by 02:00 |
+| H5 repro-trace localization | done, flag default OFF | (this commit) | Started 00:36, H0–H4 done. Live on sympy-12481: 975 functions traced, 5 chunks added and logged. Added functions were hot helpers, not the fault site: count ranking is weak. Docker check on Python 3.6 and 3.9. |
 | H6 ablation batch | todo | | |
 | H7 Meta API | waiting for key | | |
 

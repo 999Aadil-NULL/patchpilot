@@ -22,6 +22,7 @@ from agent.events import emit, write_state
 from agent.localize.focus import EditLocations, focus_context, validate_locations
 from agent.localize.repomap import build_repomap, is_test_path, render
 from agent.localize.retrieve import _chunks_text, localize
+from agent.localize.trace import refine_context, trace_repro
 from agent.oracle import grade
 from agent.patcher import apply_edits, parse_edits
 from agent.sandbox import REPRO_FILE, Sandbox, failure_summary
@@ -169,9 +170,6 @@ class Orchestrator:
         self.ev("start")
         self.state.context = localize(self.issue, plan, self.repo_dir, run_id=self.run_id)
         self.context_text = self._build_context(self.state.context)
-        self.patch_context = self.context_text
-        if config.HARNESS_FOCUS:
-            self._focus(plan)
         self.ev("end")
 
         # REPRODUCE
@@ -179,6 +177,16 @@ class Orchestrator:
         self.ev("start")
         self._reproduce(plan)
         self.ev("end")
+
+        # narrowing happens after REPRODUCE so that it can see functions the repro traced
+        if config.HARNESS_SBFL:
+            self._refine_from_trace()
+        self.patch_context = self.context_text
+        if config.HARNESS_FOCUS:
+            self._stage("localizing")
+            self.ev("start")
+            self._focus(plan)
+            self.ev("end")
 
         # PATCH / VERIFY loop
         verified: Attempt | None = None
@@ -236,6 +244,23 @@ class Orchestrator:
         if missing:
             out += "## Verified facts\n" + "\n".join(missing) + "\n\n"
         return out
+
+    def _refine_from_trace(self) -> None:
+        """Add functions the failing repro executed to the context. No valid repro, or any failure: no-op."""
+        assert self.sb is not None and self.state.context is not None
+        if not self.state.repro_script:
+            self.ev("info", message="trace", skipped="no valid repro")
+            return
+        try:
+            self.sb.write_file(REPRO_FILE, self.state.repro_script)
+            trace = trace_repro(self.sb)
+            added = refine_context(self.state.context, trace, self.repo_dir)
+        except (OSError, ValueError, RuntimeError, KeyError) as e:
+            self.ev("info", message="trace", skipped=f"{type(e).__name__}: {e}"[:300])
+            return
+        self.ev("info", message="trace", n_functions=len(trace), added=added)
+        if added:
+            self.context_text = self._build_context(self.state.context)
 
     def _focus(self, plan: Plan) -> None:
         """Pick edit locations for the patch prompt. Any failure leaves the v1 context in place."""
