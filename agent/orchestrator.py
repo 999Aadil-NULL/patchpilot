@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from agent import config, llm, prompts
 from agent.config import CACHE_DIR
 from agent.dataset import get_issue
+from agent.guards import describe_errors, syntax_check
 from agent.events import emit, write_state
 from agent.localize.repomap import is_test_path
 from agent.localize.retrieve import _chunks_text, localize
@@ -145,6 +146,8 @@ class Orchestrator:
         # sandbox + host repo copy
         self._stage("planning")
         self.ev("start")
+        self.state.run_config = config.run_config()
+        self.ev("info", message="run_config", **self.state.run_config)
         self.sb = Sandbox(self.issue.instance_id, self.run_id)
         self.sb.start()
         self.repo_dir = self.sb.export_repo(self.repo_dir)
@@ -298,20 +301,18 @@ class Orchestrator:
         self.sb.reset()
         att = Attempt(n=n)
         repro_summary = self.state.repro_base.failure_summary if self.state.repro_base else ""
-        text = llm.complete("coder", [
+        messages = [
             {"role": "system", "content": prompts.PATCH_SYSTEM},
             {"role": "user", "content": prompts.patch_user(self.issue, plan, self.context_text,
                                                            self.state.repro_script, repro_summary, self._history())},
-        ], temperature=0.2 if n == 1 else 0.5, max_tokens=8192)
-        edits = [e for e in parse_edits(text) if not is_test_path(e.file_path) and e.file_path != "repro_issue.py"]
-        att.edits = edits
-        if not edits:
-            att.apply_errors = ["No valid edit blocks found in your response (test files and repro_issue.py "
-                                "cannot be edited). Use the exact FILE/SEARCH/REPLACE format."]
-        else:
-            att.apply_errors = apply_edits(self.sb, edits)
+        ]
+        temperature = 0.2 if n == 1 else 0.5
+        text = llm.complete("coder", messages, temperature=temperature, max_tokens=8192)
+        self._apply(text, att)
+        if config.HARNESS_LINT and att.edits and not att.apply_errors:
+            self._lint_gate(att, messages, text, temperature)
         att.diff = self.sb.diff()
-        self.ev("result", attempt=n, n_edits=len(edits), apply_errors=att.apply_errors, diff=att.diff)
+        self.ev("result", attempt=n, n_edits=len(att.edits), apply_errors=att.apply_errors, diff=att.diff)
         self.ev("end", attempt=n)
 
         if not att.diff.strip() or att.apply_errors:
@@ -337,6 +338,40 @@ class Orchestrator:
         self.ev("result", attempt=n, ok=self._attempt_ok(att))
         self.ev("end", attempt=n)
         return att
+
+    def _apply(self, text: str, att: Attempt) -> None:
+        """Parse the coder's reply and apply it to the tree, recording edits and errors on the attempt."""
+        assert self.sb is not None
+        att.edits = [e for e in parse_edits(text) if not is_test_path(e.file_path) and e.file_path != "repro_issue.py"]
+        if not att.edits:
+            att.apply_errors = ["No valid edit blocks found in your response (test files and repro_issue.py "
+                                "cannot be edited). Use the exact FILE/SEARCH/REPLACE format."]
+        else:
+            att.apply_errors = apply_edits(self.sb, att.edits)
+
+    def _lint_gate(self, att: Attempt, messages: list[dict], text: str, temperature: float) -> None:
+        """Compile the edited files. On failure give the coder ONE repair turn, which is not a new attempt."""
+        assert self.sb is not None
+        errors = syntax_check(self.sb, sorted({e.file_path for e in att.edits}))
+        if not errors:
+            return
+        self.ev("info", message="lint_fail", attempt=att.n, errors=errors)
+        repair = prompts.lint_repair_user(describe_errors(self.sb, errors))
+        fixed = llm.complete("coder", messages + [{"role": "assistant", "content": text},
+                                                  {"role": "user", "content": repair}],
+                             temperature=temperature, max_tokens=8192)
+        self.sb.reset()
+        self._apply(fixed, att)
+        if att.apply_errors:
+            att.apply_errors = errors + att.apply_errors  # the next attempt still needs the compile error
+            self.ev("info", message="lint_fail", attempt=att.n, after_repair=True, errors=att.apply_errors)
+            return
+        errors = syntax_check(self.sb, sorted({e.file_path for e in att.edits}))
+        if errors:
+            att.apply_errors = errors
+            self.ev("info", message="lint_fail", attempt=att.n, after_repair=True, errors=errors)
+        else:
+            self.ev("info", message="lint_repaired", attempt=att.n)
 
     # -------------------------------------------------------------- reflect
     def _reflect(self, att: Attempt, plan: Plan) -> None:

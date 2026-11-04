@@ -152,6 +152,13 @@ def patch_user(issue: Issue, plan, context: str, repro_script: str, repro_base_s
     return f"{_issue_block(issue)}\n\n{plan_block(plan)}{context}{repro}{hist}Write the fix now."
 
 
+def lint_repair_user(errors: str) -> str:
+    return ("Your edits applied, but the result does not compile:\n\n"
+            f"{errors}\n\n"
+            "The tree has been reset to the original code. Give a corrected full set of edit blocks against the "
+            "ORIGINAL code, in the same format.")
+
+
 # ------------------------------------------------------------------ REFLECT
 REFLECT_SYSTEM = (
     "You review a failed verification of a candidate patch. Be skeptical and precise. Decide, based on the "

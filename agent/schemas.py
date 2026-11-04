@@ -92,6 +92,7 @@ class RunState(BaseModel):
     tokens_in: int = 0
     tokens_out: int = 0
     verification_mode: Literal["repro+regression", "regression_only"] = "repro+regression"
+    run_config: dict = {}   # harness flags + model ids
 
     @property
     def regression_only(self) -> bool:

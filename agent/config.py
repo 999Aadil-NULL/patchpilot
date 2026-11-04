@@ -58,3 +58,16 @@ MAX_ATTEMPTS: int = int(_env("MAX_ATTEMPTS", "3"))
 LLM_MAX_TOKENS_FLOOR: int = int(_env("LLM_MAX_TOKENS_FLOOR", "16384"))
 # prompts above this estimate get a warning event (Ollama truncates over-limit prompts silently)
 LLM_MAX_PROMPT_TOKENS: int = int(_env("LLM_MAX_PROMPT_TOKENS", "30000"))
+
+# Phase 2 harness flags: all off = v1 behaviour plus the H1 fixes
+HARNESS_LINT: bool = _env("HARNESS_LINT", "0") == "1"
+HARNESS_FOCUS: bool = _env("HARNESS_FOCUS", "0") == "1"
+HARNESS_SAMPLES: int = int(_env("HARNESS_SAMPLES", "1"))
+HARNESS_SBFL: bool = _env("HARNESS_SBFL", "0") == "1"
+
+
+def run_config() -> dict:
+    """Flags and model ids, recorded on every run so results can be attributed."""
+    return {"HARNESS_LINT": HARNESS_LINT, "HARNESS_FOCUS": HARNESS_FOCUS, "HARNESS_SAMPLES": HARNESS_SAMPLES,
+            "HARNESS_SBFL": HARNESS_SBFL, "planner_model": role_config("planner").model,
+            "coder_model": role_config("coder").model}

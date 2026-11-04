@@ -166,8 +166,8 @@ Gemini run.
 | Step | State | Commit | Notes |
 |---|---|---|---|
 | H0 context audit | done | 4571f3f | No truncation in qwen-v1 (max prompt 26,925 = 82% of 32k) |
-| H1 correctness fixes | done | 8d921c9 + guard commit | Badge, repro exception parsing, prompt-size guard. Unit tests pass; not yet exercised in a live run. |
-| H2 lint guardrail | todo | | |
+| H1 correctness fixes | done | 8d921c9, b30be0d | Badge, repro exception parsing, prompt-size guard. Ran live on django-11099 (repro+regression path). The regression-only path and a guard firing have only been tested offline. |
+| H2 lint guardrail | done, flag default OFF | (this commit) | 44 tests pass. `py_compile` checked in Docker on all 5 repos (Python 3.6–3.11). Flag off replays qwen-v1 django-11099 identically (13/13 cached). Live flag on: caught a real broken edit, but the repair turn did not apply, so `lint_repaired` has only been seen in unit tests. |
 | H3 narrow edit scope | todo | | |
 | H4 sample K + select | todo | | |
 | H5 repro-trace localization | stretch | | Only if H0–H4 done by 02:00 |
@@ -285,6 +285,9 @@ A step that overruns its slot: flag stays OFF, commit what works, move on.
 - Saved runs from before H1 lack `verification_mode`; no repro script ⇒ treat as regression-only.
 - Moving `runs/batch-*` to the archive hides them from the dashboard; copy a folder back to view it.
 - `run_batch.py` skips ids already in its results file — archive before rerunning.
+- Models sometimes put ```` ```python ```` fence lines INSIDE SEARCH/REPLACE (3/40 edit blocks in qwen-v1, all
+  django-11099). The fuzzy tier still matches SEARCH, so the fence is written into the source file. H2 catches
+  it as a SyntaxError; `patcher.py` does not strip it yet.
 
 ## 9. Out of scope tonight
 Fine-tuning, LLM-as-judge rerankers, new retrieval models, multi-agent debate, parallel runs,
