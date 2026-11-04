@@ -207,7 +207,8 @@ def render_run(run_id: str) -> None:
 
     # badges
     if state.status in ("awaiting_review", "approved"):
-        agent_b = badge("Agent verification", "PASS", "ok")
+        agent_b = (badge("Agent verification", "PASS (regression only)", "wait") if state.regression_only
+                   else badge("Agent verification", "PASS", "ok"))
     elif state.status == "failed" or phase == "stalled":
         agent_b = badge("Agent verification", "FAIL", "bad")
     else:
@@ -376,6 +377,8 @@ with st.sidebar:
         def _fmt(r: str) -> str:
             s = load_state(r)
             icon = {"awaiting_review": "✅", "approved": "🟢", "failed": "❌"}.get(s.status if s else "", "⏳")
+            if s and s.status == "awaiting_review" and s.regression_only:
+                icon = "⚠️"
             res = " · 🏛️" if s and s.oracle and s.oracle.resolved else ""
             return f"{icon} {r}{res}"
 

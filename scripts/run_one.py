@@ -29,7 +29,8 @@ def main() -> int:
                   f"edits={len(a.edits)} apply_errors={len(a.apply_errors)} "
                   f"repro={'-' if a.repro is None else a.repro.passed} "
                   f"regression={'-' if a.regression is None else a.regression.passed} {a.regression_files}")
-    t.add_row("agent verification", "PASS" if st.status in ("awaiting_review", "approved") else "FAIL")
+    passed = "PASS (regression only)" if st.regression_only else "PASS"
+    t.add_row("agent verification", passed if st.status in ("awaiting_review", "approved") else "FAIL")
     t.add_row("official grading", "-" if st.oracle is None else ("RESOLVED" if st.oracle.resolved else "NOT RESOLVED"))
     t.add_row("tokens", f"in={st.tokens_in} out={st.tokens_out}")
     con.print(t)

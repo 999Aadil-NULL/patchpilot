@@ -78,7 +78,8 @@ def run_instance(iid: str) -> dict:
 def summarize(iid: str, run_id: str, duration: float, note: str) -> dict:
     gold = set(re.findall(r"^diff --git a/(\S+) b/", get_raw(iid)["patch"], re.M))
     row = {"instance_id": iid, "repo": iid.split("__")[0], "run_id": run_id, "duration_s": round(duration),
-           "note": note, "status": "crashed", "verified": False, "resolved": False, "oracle_ran": False,
+           "note": note, "status": "crashed", "verified": False, "regression_only_pass": False,
+           "resolved": False, "oracle_ran": False,
            "gold_file_found": False, "repro_valid": False, "attempts": 0, "attempts_applied": 0,
            "tokens_in": 0, "tokens_out": 0, "failure_reason": note}
     p = RUNS_DIR / run_id / "state.json"
@@ -86,7 +87,8 @@ def summarize(iid: str, run_id: str, duration: float, note: str) -> dict:
         return row
     s = RunState.model_validate_json(p.read_text(encoding="utf-8"))
     row.update(
-        status=s.status, verified=s.status == "awaiting_review",
+        status=s.status, verified=s.status == "awaiting_review" and not s.regression_only,
+        regression_only_pass=s.status == "awaiting_review" and s.regression_only,
         resolved=bool(s.oracle and s.oracle.resolved), oracle_ran=s.oracle is not None,
         gold_file_found=bool(s.context and gold & set(s.context.candidate_files)),
         repro_valid=bool(s.repro_script), attempts=len(s.attempts),
@@ -108,7 +110,8 @@ def report(rows: list[dict]) -> str:
         "",
         "| Metric | Result |", "|---|---|",
         f"| **Resolved (official SWE-bench grading)** | **{pct(c('resolved'))}** |",
-        f"| Passed agent verification | {pct(c('verified'))} |",
+        f"| Passed agent verification (repro + regression) | {pct(c('verified'))} |",
+        f"| Passed regression only (not counted as verified) | {pct(c('regression_only_pass'))} |",
         f"| Verified and resolved | {pct(both)} |",
         f"| Verified but NOT resolved (false positive) | {false_pos} |",
         f"| Resolved but not verified (false negative) | {false_neg} |",

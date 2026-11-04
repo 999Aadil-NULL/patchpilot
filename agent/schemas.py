@@ -91,3 +91,9 @@ class RunState(BaseModel):
     failure_reason: str = ""
     tokens_in: int = 0
     tokens_out: int = 0
+    verification_mode: Literal["repro+regression", "regression_only"] = "repro+regression"
+
+    @property
+    def regression_only(self) -> bool:
+        """True when no valid repro backs the verdict. Runs saved before this field existed have no mode set."""
+        return self.verification_mode == "regression_only" or not self.repro_script

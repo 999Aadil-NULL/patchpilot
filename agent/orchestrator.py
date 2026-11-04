@@ -26,7 +26,8 @@ from agent.sandbox import REPRO_FILE, Sandbox, failure_summary
 from agent.schemas import Attempt, ContextBundle, ExecResult, Plan, RunState, TestResult
 
 INVALID_REPRO_EXC = {"ImportError", "ModuleNotFoundError", "SyntaxError", "IndentationError", "NameError",
-                     "TabError"}
+                     "TabError", "ImproperlyConfigured"}
+_EXC_LINE_RE = re.compile(r"^([A-Za-z_][\w.]*)(?::|$)")
 REPRO_REWRITES = 2
 MAX_REGRESSION_FILES = 3
 FULL_FILE_MAX_LINES = 500
@@ -52,12 +53,20 @@ def _extract_python(text: str) -> str:
 
 
 def _final_exception(tr: TestResult) -> str | None:
-    """Exception class name from the last traceback line (e.g. 'AssertionError'), if any."""
-    text = (tr.exec.stdout or "") + "\n" + (tr.exec.stderr or "")
-    for line in reversed(text.strip().splitlines()):
-        m = re.match(r"^([A-Za-z_][\w.]*(?:Error|Exception|Warning|Failure|Exit|Interrupt))\b(:|$)", line.strip())
-        if m:
-            return m.group(1).split(".")[-1]
+    """Exception class name from the last traceback (e.g. 'AssertionError'), whatever its suffix, if any.
+
+    Frames are indented, so the first unindented line after the start is the exception. Without a
+    'Traceback' header (a script that does not compile, or trimmed output) start at the last frame.
+    """
+    lines = ((tr.exec.stdout or "") + "\n" + (tr.exec.stderr or "")).splitlines()
+    starts = ([i for i, ln in enumerate(lines) if ln.strip() == "Traceback (most recent call last):"]
+              or [i for i, ln in enumerate(lines) if ln.lstrip().startswith('File "')])
+    if not starts:
+        return None
+    for line in lines[starts[-1] + 1:]:
+        if line.strip() and not line[0].isspace():
+            m = _EXC_LINE_RE.match(line)
+            return m.group(1).split(".")[-1] if m else None
     return None
 
 
@@ -171,6 +180,8 @@ class Orchestrator:
             if self._attempt_ok(att):
                 verified = att
                 break
+
+        self.state.verification_mode = "repro+regression" if self.state.repro_script else "regression_only"
 
         # ORACLE (on success, else on the best failed attempt for the record)
         target = verified or self._best_failed()
