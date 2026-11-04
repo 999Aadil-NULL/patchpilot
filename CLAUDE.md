@@ -142,7 +142,7 @@ PLAN → LOCALIZE → REPRODUCE → [PATCH → VERIFY → (REFLECT)]×≤MAX_ATT
 
 ## 6. Status (Claude Code keeps this current)
 
-**v1 — complete** (tag `v1-baseline` at `1f5921c` on `master`)
+**v1 — complete** (tag `v1-baseline` at `73d8495` on `master`)
 
 Baseline batch `qwen-v1` (13 instances, qwen2.5-coder:7b, 59 min, archived in
 `results/qwen-v1/` and `runs/archive/qwen-v1/`). Predates H1 fixes.
@@ -165,16 +165,16 @@ Gemini run.
 
 | Step | State | Commit | Notes |
 |---|---|---|---|
-| H0 context audit | done | 4571f3f | No truncation in qwen-v1 (max prompt 26,925 = 82% of 32k) |
-| H1 correctness fixes | done | 8d921c9, b30be0d | Badge, repro exception parsing, prompt-size guard. Ran live on django-11099 (repro+regression path). The regression-only path and a guard firing have only been tested offline. |
-| H2 lint guardrail | done, flag default OFF | (this commit) | 44 tests pass. `py_compile` checked in Docker on all 5 repos (Python 3.6–3.11). Flag off replays qwen-v1 django-11099 identically (13/13 cached). Live flag on: caught a real broken edit, but the repair turn did not apply, so `lint_repaired` has only been seen in unit tests. |
-| H3 narrow edit scope | done, flag default OFF | (this commit) | First PATCH prompt, flag vs qwen-v1: django-11099 3,202 → 1,582 tokens (−51%), sympy-12481 4,229 → 2,782 (−34%). Locations logged. `Class.attribute` resolves to its class. |
-| H4 sample K + select | done, flag default OFF | (this commit) | Live K=3 on sympy-12481 with lint + focus: 9 patch calls, 9 distinct cache keys, selection event each attempt; not resolved; 21 min. K=1: unit test, plus a flag-off replay matching v1 on attempt 1 (later attempts diverge after an uncached reflection call). |
-| H5 repro-trace localization | done, flag default OFF | (this commit) | Started 00:36, H0–H4 done. Live on sympy-12481: 975 functions traced, 5 chunks added and logged. Added functions were hot helpers, not the fault site: count ranking is weak. Docker check on Python 3.6 and 3.9. |
-| H6 ablation batch | running | (this commit: tooling) | `qwen-v2-full` started with LINT, FOCUS, SAMPLES=3, SBFL on; hard stop 04:15 IST. |
+| H0 context audit | done | 740544b | No truncation in qwen-v1 (max prompt 26,925 = 82% of 32k) |
+| H1 correctness fixes | done | 928d176, 5a174cf | Badge, repro exception parsing, prompt-size guard. Ran live on django-11099 (repro+regression path). The regression-only path and a guard firing have only been tested offline. |
+| H2 lint guardrail | done, flag default OFF | 5061cd8, 5f524f7 | 44 tests pass. `py_compile` checked in Docker on all 5 repos (Python 3.6–3.11). Flag off replays qwen-v1 django-11099 identically (13/13 cached). Live flag on: caught a real broken edit, but the repair turn did not apply, so `lint_repaired` has only been seen in unit tests. |
+| H3 narrow edit scope | done, flag default OFF | db9597c | First PATCH prompt, flag vs qwen-v1: django-11099 3,202 → 1,582 tokens (−51%), sympy-12481 4,229 → 2,782 (−34%). Locations logged. `Class.attribute` resolves to its class. |
+| H4 sample K + select | done, flag default OFF | ec4d19f | Live K=3 on sympy-12481 with lint + focus: 9 patch calls, 9 distinct cache keys, selection event each attempt; not resolved; 21 min. K=1: unit test, plus a flag-off replay matching v1 on attempt 1 (later attempts diverge after an uncached reflection call). |
+| H5 repro-trace localization | done, flag default OFF | 1da4f1f | Started 00:36, H0–H4 done. Live on sympy-12481: 975 functions traced, 5 chunks added and logged. Added functions were hot helpers, not the fault site: count ranking is weak. Docker check on Python 3.6 and 3.9. |
+| H6 ablation batch | running | 4cf4cc3 (tooling) | `qwen-v2-full` started with LINT, FOCUS, SAMPLES=3, SBFL on; hard stop 04:15 IST. |
 | H7 Meta API | waiting for key | | |
-| UI readable names | done | 2a65fae | Display only, in `ui/app.py`: picker, past runs and run header show project + PR + issue title, with the raw id in small monospace. No ids, files or folders renamed. Rendered via AppTest; not viewed in a browser. |
-| Pre-push audit | clean; push blocked | — | 12 commits scanned: no secrets, nothing over 5 MB (largest 238 KB); `.env`, `cache/`, `runs/`, `data/` ignored and never tracked. **Not pushed: no `origin` remote.** `README: submission draft` not committed: the README with FILL markers is not on disk. |
+| UI readable names | done | 6a03476 | Display only, in `ui/app.py`: picker, past runs and run header show project + PR + issue title, with the raw id in small monospace. No ids, files or folders renamed. Rendered via AppTest; not viewed in a browser. |
+| Pre-push audit + history rewrite | clean; force push pending | 8b020c5 | 13 commits scanned: no secrets, nothing over 5 MB; `.env`, `cache/`, `runs/`, `data/` never tracked. First push done by the user. `Co-Authored-By` trailers then removed from all commits with file contents unchanged; hashes in this table are the rewritten ones. At this commit GitHub still has the old history. |
 
 ---
 
